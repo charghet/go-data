@@ -1,0 +1,1 @@
+go build -o build/go-data.exe main.go database.go

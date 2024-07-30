@@ -13,10 +13,31 @@ type Result struct {
 	Data interface{} `json:"data,omitempty"`
 }
 
-func (Result) Ok(data interface{}) Result {
+func Ok(data interface{}) Result {
 	return Result{
 		Code: 200,
 		Msg:  "ok",
+		Data: data,
+	}
+}
+func Fail(msg string, data interface{}) Result {
+	if msg == "" {
+		msg = "fail"
+	}
+	return Result{
+		Code: 300,
+		Msg:  msg,
+		Data: data,
+	}
+}
+
+func Error(msg string, data interface{}) Result {
+	if msg == "" {
+		msg = "error"
+	}
+	return Result{
+		Code: 500,
+		Msg:  msg,
 		Data: data,
 	}
 }
@@ -52,5 +73,6 @@ func SetResBody(w http.ResponseWriter, body interface{}) error {
 		return err
 	}
 	fmt.Fprint(w, string(bodyBytes))
+	w.Header().Set("Content-Type", "application/json")
 	return nil
 }

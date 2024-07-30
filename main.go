@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -14,33 +15,73 @@ import (
 
 var dbInfo DatabaseInfo
 
-type GetDataReq struct {
-	Name     string `json:"name"`
+type LoginReq struct {
+	UserName string `json:"username"`
 	Password string `json:"password"`
-	Str      bool   `json:"str"`
 }
 
-func GetDataServer(w http.ResponseWriter, req *http.Request) {
+type GetDataReq struct {
+	LoginReq
+}
+
+type SetDataReq struct {
+	LoginReq
+	Content string `json:"content"`
+}
+
+func GetDataHandler(w http.ResponseWriter, req *http.Request) {
 	var reqData GetDataReq
 	err := uhttp.GetBodyEntity(req, &reqData)
 	if err != nil {
-		slog.Error("GetBodyJson error", "err", err)
+		slog.Error("GetBodyJson", "err", err)
 		return
 	}
-	slog.Info("login", "userName", reqData.Name)
-	content, err := dbInfo.GetContent(reqData.Name, reqData.Password)
-	if err != nil {
-		slog.Error("GetContent error", "err", err)
+	slog.Info("login", "userName", reqData.UserName)
+	content, errMsg, err := dbInfo.GetContent(reqData.UserName, reqData.Password)
+
+	if errMsg != "" {
+		slog.Warn("GetContent", "warn", errMsg)
+		uhttp.SetResBody(w, uhttp.Fail(errMsg, nil))
+		return
+	} else if err != nil {
+		slog.Error("GetContent", "err", err.Error())
+		uhttp.SetResBody(w, uhttp.Error("", nil))
 		return
 	}
-	var data any
-	if reqData.Str && content != nil {
-		data = string(content)
-	} else {
+	var data any = nil
+	if content != nil {
 		data = content
 	}
-	res := uhttp.Result{}.Ok(data)
-	uhttp.SetResBody(w, res)
+	uhttp.SetResBody(w, uhttp.Ok(data))
+}
+
+func SetDataHandler(w http.ResponseWriter, req *http.Request) {
+	var reqData SetDataReq
+	err := uhttp.GetBodyEntity(req, &reqData)
+	if err != nil {
+		slog.Error("SetDataJson", "err", err)
+		uhttp.SetResBody(w, uhttp.Error("", nil))
+		return
+	}
+
+	bytes, err := base64.StdEncoding.DecodeString(reqData.Content)
+	if err != nil {
+		slog.Error("SetData", "err", err)
+		uhttp.SetResBody(w, uhttp.Fail("base64 decode error!", nil))
+		return
+	}
+
+	success, errMsg, err := dbInfo.SetContent(reqData.UserName, reqData.Password, bytes)
+	if success {
+		slog.Info("SetData success")
+		uhttp.SetResBody(w, uhttp.Ok(nil))
+	} else if errMsg != "" {
+		slog.Warn("SetData", "warn", errMsg)
+		uhttp.SetResBody(w, uhttp.Fail(errMsg, nil))
+	} else if err != nil {
+		slog.Error("SetData", "err", err)
+		uhttp.SetResBody(w, uhttp.Error("", nil))
+	}
 }
 
 func main() {
@@ -55,7 +96,7 @@ func main() {
 	help := flag.Bool("help", false, "Show help")
 
 	host := flag.String("host", "localhost", "Host")
-	port := flag.Int("port", 80, "Port")
+	port := flag.Int("port", 3200, "Port")
 
 	isUserList := flag.Bool("list", false, "Show user list")
 	toAddUser := flag.Bool("adduser", false, "Add user to database")
@@ -134,7 +175,8 @@ func main() {
 
 	// 启动HTTP服务
 	fmt.Println("Start HTTP server")
-	http.HandleFunc("/data", GetDataServer)
+	http.HandleFunc("/getData", GetDataHandler)
+	http.HandleFunc("/setData", SetDataHandler)
 	err = http.ListenAndServe(fmt.Sprintf("%s:%d", *host, *port), nil)
 	if err != nil {
 		fmt.Println(err)

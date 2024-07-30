@@ -116,38 +116,38 @@ func (dbInfo *DatabaseInfo) ResetPassword(user string, password string) {
 	}
 }
 
-func (dbInfo *DatabaseInfo) GetContent(user string, password string) (content []byte, err error) {
+func (dbInfo *DatabaseInfo) GetContent(user string, password string) (content []byte, errMsg string, err error) {
 	// 获取用户信息
 	getUserInfoQuery := `SELECT password,content FROM data WHERE user_name = ?`
 	rows, err := dbInfo.db.Query(getUserInfoQuery, user)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer rows.Close()
 	hash := ""
 	if rows.Next() {
 		err = rows.Scan(&hash, &content)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		// 验证密码
 		err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 		if err != nil {
 			// 密码错误
-			return nil, nil
+			return nil, "账户不存在或密码错误！", err
 		}
 		if content == nil {
 			content = []byte{}
 		}
 	}
-	return content, nil
+	return content, "", nil
 }
-func (dbInfo *DatabaseInfo) SetContent(user string, password string, content []byte) (success bool, err error) {
+func (dbInfo *DatabaseInfo) SetContent(user string, password string, content []byte) (success bool, errMsg string, err error) {
 	// 获取用户信息
 	getUserInfoQuery := `SELECT password FROM data WHERE user_name = ?`
 	rows, err := dbInfo.db.Query(getUserInfoQuery, user)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
 	defer rows.Close()
@@ -155,23 +155,23 @@ func (dbInfo *DatabaseInfo) SetContent(user string, password string, content []b
 	if rows.Next() {
 		err = rows.Scan(&hash)
 		if err != nil {
-			return false, err
+			return false, "", err
 		}
 		// 验证密码
 		err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 		if err != nil {
 			// 密码错误
 			slog.Warn("password error")
-			return false, nil
+			return false, "账户不存在或密码错误！", nil
 		}
 		// 更新内容
 		rows.Close()
 		updateQuery := `UPDATE data SET content = ? WHERE user_name = ?`
 		_, err = dbInfo.db.Exec(updateQuery, content, user)
 		if err != nil {
-			return false, err
+			return false, "", err
 		}
-		return true, nil
+		return true, "", nil
 	}
-	return false, nil
+	return false, "", nil
 }
